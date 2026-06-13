@@ -13,9 +13,45 @@ a{
     text-decoration: none;
 }
 
+.nav-link:hover{
+    color: green;
+    text-decoration: underline;
+}
+
 .carousel-item img{
     height: 400px;
     width: 100%;
     object-fit: cover;
     object-position: center;
+}
+
+.old_price{
+    font-weight: bold;
+    color: red;
+}
+
+.new_price{
+    font-weight: bold;
+    background-color: green;
+    color: white;
+    padding: 2px;
+    border-radius: 5px;
+}
+
+.pic-box{
+    position: relative;
+}
+
+.hotImage{
+    background-color: orange;
+    color: white;
+    font-weight: bold;
+    width: 60px;
+    display: inline-block;
+    border-radius: 5px;
+    padding:5px;
+    position: absolute;
+    top: 0;
+    right: 20px;
+    z-index: 10;
 }

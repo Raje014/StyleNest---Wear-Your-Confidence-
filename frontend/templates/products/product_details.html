@@ -1,0 +1,48 @@
+{% extends 'layouts/main_template.html'%}
+
+{% block title %}
+    Dashboard
+{% endblock title %}
+
+{% block content %}
+<section class="bg-light py-4 my-1" style="min-height: 600px;">
+    <div class="container">
+        <div class="row">
+            <div class="col-12">
+                <h4 class="mb-3">{{products}} Details</h4>
+                <hr style="border-color: #b8bfc2;">
+                <nav style="--bs-breadcrumb-divider: '>';" aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Home</a></li>
+                        <li class="breadcrumb-item"><a href="{% url 'collections' products.category_name.name %}">Collections</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">{{products}}</li>
+                    </ol>
+                </nav>
+                {% include 'inc/message.html' %}
+            </div>
+            <div class="col-3 my-3 pic-box">
+                {% if products.trending %}
+                <div class="hotImage">Best Seller</div>
+                {% endif %}
+                <img src="{{products.product_image.url}}" class="card-image-top" alt="Products" width="300vh" height="400vh">
+            </div>
+            <div class="col-8 my-3">
+                <h5 class="text-success">{{products | upper}}</h5>
+                <p>{{products.vendor}}</p>
+                <p>{{products.description}}</p>
+                <h6 class="my-2 text-danger">Current Price: Rs. <s>{{products.original_price}}</s></h6>
+                <h5 class="my-2 text-primary">Offer Price: Rs. {{products.selling_price}}</h5>
+                <div class="my-3">
+                    {% if products.quantity > 0 %}
+                    <button class="btn btn-primary"><i class="fa fa-shoppingcart"></i> Add to Cart</button>
+                    {% else %}
+                    <button class="btn btn-secondary"><i class="fa fa-minus"></i> Out of Stock</button>
+                    {% endif %}
+                    <button class="btn btn-danger"><i class="fa fa-heart"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</section>
+{% endblock content%}
