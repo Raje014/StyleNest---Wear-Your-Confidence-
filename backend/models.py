@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 import datetime
 import os 
 
@@ -48,4 +49,19 @@ class product(models.Model):
     def __str__(self):
         return self.name
 
+class Cart(models.Model):
+    user = models.ForeignKey(User, on_delete = models.CASCADE)
+    Product = models.ForeignKey(product, on_delete=models.CASCADE)
+    product_qty = models.IntegerField(null=False,blank=False)
+    created_at = models.DateTimeField(auto_now_add = True)
+
+    # decorator
+    @property
+    def total_cost(self):
+        return self.product_qty*self.Product.selling_price
+    
+class Favourite(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    Product = models.ForeignKey(product, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add = True)
 
