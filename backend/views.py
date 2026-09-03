@@ -20,7 +20,9 @@ def loginpage(request):
     if request.user.is_authenticated:
         return redirect("/")
     else:
+        # check whether the method is post or not 
         if request.method == 'POST':
+            # request.post => dictionary ah data ah store pannitu dic.get("username") => username ah get pannum
             name = request.POST.get('username')
             pwd = request.POST.get('password')
             user = authenticate(request,username=name,password=pwd)
