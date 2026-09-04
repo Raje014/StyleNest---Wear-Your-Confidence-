@@ -6,6 +6,7 @@ from frontend.form import CustomUserForm
 from django.contrib.auth import authenticate,login,logout
 import json
 from django.http import JsonResponse
+from decimal import Decimal
 
 # Create your views here.
 def dashboard(request):
@@ -108,6 +109,63 @@ def cart_page(request):
         return render(request, "pages/cart.html", {"cart":cart})
     else:
         return redirect('/')
+
+def update_cart_quantity(request, cid):
+    if request.method == 'POST' and request.user.is_authenticated:
+
+        data = json.loads(request.body)
+        new_quantity = int(data.get('quantity'))
+
+        try:
+            cart_item = Cart.objects.get(
+                id=cid,
+                user=request.user
+            )
+        except Cart.DoesNotExist:
+            return JsonResponse({
+                'status': 'Cart item not found'
+            }, status=404)
+
+        if new_quantity < 1:
+            return JsonResponse({
+                'status': 'Quantity must be at least 1'
+            }, status=400)
+
+        if new_quantity > cart_item.Product.quantity:
+            return JsonResponse({
+                'status': 'Only limited stock available'
+            }, status=400)
+
+        old_quantity = cart_item.product_qty
+
+        # Update cart
+        cart_item.product_qty = new_quantity
+        cart_item.save()
+
+        # Save history
+        if new_quantity > old_quantity:
+            action = 'QUANTITY_INCREASED'
+        elif new_quantity < old_quantity:
+            action = 'QUANTITY_DECREASED'
+        else:
+            action = None
+
+        if action:
+            CartHistory.objects.create(
+                user=request.user,
+                Product=cart_item.Product,
+                old_quantity=old_quantity,
+                new_quantity=new_quantity,
+                action=action
+            )
+
+        return JsonResponse({
+            'status': 'Quantity updated'
+        })
+
+    return JsonResponse({
+        'status': 'Invalid request'
+    }, status=400)
     
 # deleted cart products
 def deleted_product(request, cid):
@@ -146,3 +204,316 @@ def remove_fav(request, fid):
     fav_item = Favourite.objects.get(id=fid)
     fav_item.delete()
     return redirect("/fav_view_page")
+
+# checkout page
+# def checkout(request):
+#     if not request.user.is_authenticated:
+#         return redirect('/login')
+
+#     cart = Cart.objects.filter(user=request.user)
+
+#     if not cart.exists():
+#         messages.warning(request, "Your cart is empty.")
+#         return redirect('/cart')
+
+#     return render(request, 'pages/checkout.html', {
+#         'cart': cart,
+#         'user': request.user
+#     })
+
+# new checkout page
+# def checkout(request):
+#     if not request.user.is_authenticated:
+#         return redirect('/login')
+
+#     cart = Cart.objects.filter(user=request.user)
+
+#     if not cart.exists():
+#         messages.warning(request, "Your cart is empty.")
+#         return redirect('/cart')
+
+#     if request.method == 'POST':
+
+#         customer_name = request.POST.get('customer_name')
+#         mobile = request.POST.get('mobile')
+#         address = request.POST.get('address')
+#         city = request.POST.get('city')
+#         state = request.POST.get('state')
+#         pincode = request.POST.get('pincode')
+#         payment_method = request.POST.get('payment_method')
+
+#         # Calculate total on server
+#         total_amount = Decimal('0.00')
+
+#         for item in cart:
+#             total_amount += Decimal(str(item.Product.selling_price)) * item.product_qty
+
+#         # Create Order
+#         order = Order.objects.create(
+#             user=request.user,
+#             customer_name=customer_name,
+#             mobile=mobile,
+#             address=address,
+#             city=city,
+#             state=state,
+#             pincode=pincode,
+#             payment_method=payment_method,
+#             total_amount=total_amount,
+#             status='PENDING'
+#         )
+
+#         # Create Order Items
+#         for item in cart:
+
+#             unit_price = Decimal(str(item.Product.selling_price))
+#             total_price = unit_price * item.product_qty
+
+#             OrderItem.objects.create(
+#                 order=order,
+#                 Product=item.Product,
+#                 quantity=item.product_qty,
+#                 unit_price=unit_price,
+#                 total_price=total_price
+#             )
+
+#         return redirect('order_review', order_id=order.id)
+
+#     return render(request, 'pages/checkout.html', {
+#         'cart': cart,
+#         'user': request.user
+#     })
+
+# original checkout
+def checkout(request):
+
+    if not request.user.is_authenticated:
+        return redirect('/login')
+
+    # Check whether user came through Buy Now
+    buy_now_product_id = request.session.get('buy_now_product_id')
+    buy_now_quantity = request.session.get('buy_now_quantity')
+
+    # -----------------------------
+    # BUY NOW
+    # -----------------------------
+    if buy_now_product_id:
+
+        try:
+            buy_product = product.objects.get(
+                id=buy_now_product_id,
+                status=0
+            )
+        except product.DoesNotExist:
+            messages.error(request, "Product not found.")
+            return redirect('/')
+
+        if not buy_now_quantity:
+            buy_now_quantity = 1
+
+        if buy_now_quantity > buy_product.quantity:
+            messages.error(request, "Only limited stock available.")
+            return redirect('/')
+
+        checkout_items = [{
+            'Product': buy_product,
+            'product_qty': buy_now_quantity,
+        }]
+
+        is_buy_now = True
+
+    # -----------------------------
+    # NORMAL CART CHECKOUT
+    # -----------------------------
+    else:
+
+        cart = Cart.objects.filter(user=request.user)
+
+        if not cart.exists():
+            messages.warning(request, "Your cart is empty.")
+            return redirect('/cart')
+
+        checkout_items = cart
+        is_buy_now = False
+
+    # -----------------------------
+    # FORM SUBMISSION
+    # -----------------------------
+    if request.method == 'POST':
+
+        customer_name = request.POST.get('customer_name')
+        mobile = request.POST.get('mobile')
+        address = request.POST.get('address')
+        city = request.POST.get('city')
+        state = request.POST.get('state')
+        pincode = request.POST.get('pincode')
+        payment_method = request.POST.get('payment_method')
+
+        # Calculate total
+        total_amount = Decimal('0.00')
+
+        for item in checkout_items:
+
+            if is_buy_now:
+                product_obj = item['Product']
+                quantity = item['product_qty']
+            else:
+                product_obj = item.Product
+                quantity = item.product_qty
+
+            total_amount += (
+                Decimal(str(product_obj.selling_price))
+                * quantity
+            )
+
+        # Create Order
+        order = Order.objects.create(
+            user=request.user,
+            customer_name=customer_name,
+            mobile=mobile,
+            address=address,
+            city=city,
+            state=state,
+            pincode=pincode,
+            payment_method=payment_method,
+            total_amount=total_amount,
+            status='PENDING'
+        )
+
+        # Create Order Items
+        for item in checkout_items:
+
+            if is_buy_now:
+                product_obj = item['Product']
+                quantity = item['product_qty']
+            else:
+                product_obj = item.Product
+                quantity = item.product_qty
+
+            unit_price = Decimal(str(product_obj.selling_price))
+            total_price = unit_price * quantity
+
+            OrderItem.objects.create(
+                order=order,
+                Product=product_obj,
+                quantity=quantity,
+                unit_price=unit_price,
+                total_price=total_price
+            )
+
+        # Clear Buy Now session
+        request.session.pop('buy_now_product_id', None)
+        request.session.pop('buy_now_quantity', None)
+
+        return redirect('order_review', order_id=order.id)
+
+    # -----------------------------
+    # SHOW CHECKOUT PAGE
+    # -----------------------------
+    return render(request, 'pages/checkout.html', {
+        'cart': checkout_items,
+        'user': request.user
+    })
+
+# order review page
+def order_review(request, order_id):
+
+    if not request.user.is_authenticated:
+        return redirect('/login')
+
+    try:
+        order = Order.objects.get(
+            id=order_id,
+            user=request.user
+        )
+    except Order.DoesNotExist:
+        messages.error(request, "Order not found.")
+        return redirect('/cart')
+
+    return render(request, 'pages/order_review.html', {
+        'order': order,
+        'items': order.items.all()
+    })
+
+# order placed
+def place_order(request, order_id):
+
+    if not request.user.is_authenticated:
+        return redirect('/login')
+
+    try:
+        order = Order.objects.get(
+            id=order_id,
+            user=request.user
+        )
+    except Order.DoesNotExist:
+        messages.error(request, "Order not found.")
+        return redirect('/cart')
+
+    if request.method != 'POST':
+        return redirect('order_review', order_id=order.id)
+
+    # COD
+    if order.payment_method == 'COD':
+
+        order.status = 'PLACED'
+        order.save()
+
+        # Reduce stock
+        for item in order.items.all():
+            item.Product.quantity -= item.quantity
+            item.Product.save()
+
+        # Clear user's cart
+        Cart.objects.filter(user=request.user).delete()
+
+        return redirect('order_success', order_id=order.id)
+
+    # Razorpay will be added next
+    return redirect('order_review', order_id=order.id)
+
+# order success page
+def order_success(request, order_id):
+
+    if not request.user.is_authenticated:
+        return redirect('/login')
+
+    order = Order.objects.get(
+        id=order_id,
+        user=request.user
+    )
+
+    return render(request, 'pages/order_success.html', {
+        'order': order
+    })
+
+# buy now
+def buy_now(request, pid):
+
+    if not request.user.is_authenticated:
+        return redirect('/login')
+
+    try:
+        Product = product.objects.get(
+            id=pid,
+            status=0
+        )
+    except product.DoesNotExist:
+        messages.error(request, "Product not found.")
+        return redirect('/')
+
+    # Get quantity selected on product page
+    quantity = int(request.GET.get('quantity', 1))
+
+    if quantity < 1:
+        quantity = 1
+
+    # Check stock
+    if quantity > Product.quantity:
+        messages.error(request, "Only limited stock available.")
+        return redirect(request.META.get('HTTP_REFERER', '/'))
+
+    # Store Buy Now product temporarily in session
+    request.session['buy_now_product_id'] = Product.id
+    request.session['buy_now_quantity'] = quantity
+
+    return redirect('checkout')

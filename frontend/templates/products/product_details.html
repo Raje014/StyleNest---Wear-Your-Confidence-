@@ -43,6 +43,7 @@
                         </div>
                     </p>
                     <button class="btn btn-primary" id="btnCart"><i class="fa fa-shoppingcart"></i> Add to Cart</button>
+                    <button class="btn btn-success" id="btnBuyNow"><i class="fa fa-bolt"></i> Buy Now</button>
                     {% else %}
                     <button class="btn btn-secondary"><i class="fa fa-minus"></i> Out of Stock</button>
                     {% endif %}
@@ -59,9 +60,9 @@
         const btnMinus = document.getElementById("btnMinus");
         const txtQty = document.getElementById("txtQty");
         const pid = document.getElementById("pid");
-        const btnCart = document.getElementById("btnCart")
-        const btnfav = document.getElementById("btnfav")
-
+        const btnCart = document.getElementById("btnCart");
+        const btnBuyNow = document.getElementById("btnBuyNow");
+        const btnfav = document.getElementById("btnfav");
 
         // btn plus function
         btnPlus.addEventListener("click", function(){
@@ -138,6 +139,23 @@
                     alert(data['status']);
                 });
             })
+
+        // Buy Now
+        btnBuyNow.addEventListener("click", function(){
+
+            let qty = parseInt(txtQty.value, 10);
+            qty = isNaN(qty) ? 0 : qty;
+
+            if(qty > 0){
+
+                window.location.href =
+                    `/buy-now/${pid.value}/?quantity=${qty}`;
+
+            }else{
+                alert("Please Enter the Quantity");
+            }
+
+        });
     })
 </script>
 {% endblock content%}

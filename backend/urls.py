@@ -16,4 +16,10 @@ urlpatterns = [
     path('favourite', favourite_page, name='favourite'),
     path('fav_view_page', fav_view_page, name='fav_view_page'),
     path('remove_fav/<str:fid>', remove_fav, name='remove_fav'),
+    path('update_cart_quantity/<str:cid>',update_cart_quantity,name='update_cart_quantity'),
+    path('checkout/', checkout, name='checkout'),
+    path('order-review/<int:order_id>/', order_review, name='order_review'),
+    path('place-order/<int:order_id>/', place_order, name='place_order'),
+    path('order-success/<int:order_id>/', order_success, name='order_success'),
+    path('buy-now/<int:pid>/', buy_now, name='buy_now'),
 ]

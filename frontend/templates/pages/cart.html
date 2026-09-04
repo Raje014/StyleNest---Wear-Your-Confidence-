@@ -27,7 +27,14 @@
                     <td><img src="{{item.Product.product_image.url}}" height="75px" width="50px" alt="{{item.product_name}}"></td>
                     <td>{{item.Product.name}}</td>
                     <td>{{item.Product.selling_price | stringformat:'d'}}</td>
-                    <td>{{item.product_qty}}</td>
+                    <!-- <td>{{item.product_qty}}</td> -->
+                    <td>
+                        <span id="qty-{{ item.id }}">{{ item.product_qty }}</span>
+                        <button type="button" class="btn btn-sm ms-2"
+                                onclick="editQuantity({{ item.id }})">
+                            ✏️
+                        </button>
+                    </td>
                     <td class="amt">{{item.total_cost | stringformat:'d'}}</td>
                     <td><a href="{% url 'deleted_product' item.id %}" onclick="return confirm('Are you sure?')"
                         class="btn btn-danger btn-sm"><i class="fa fa-trash"></i> Remove</a></td>
@@ -40,6 +47,12 @@
                     <td id="net">0</td>
                 </tr>
             </table>
+
+            <div class="text-end mt-4">
+                <a href="{% url 'checkout' %}" class="btn btn-primary btn-lg">
+                    Proceed to Checkout
+                </a>
+            </div>
         
         </div>
     </div>
@@ -52,6 +65,62 @@
         return acc += Number(curr.textContent)
     },0);
     document.getElementById("net").innerHTML="Rs: "+res;
+
+
+    // quantity edit
+    function editQuantity(cartId) {
+        const quantitySpan = document.getElementById("qty-" + cartId);
+        const currentQuantity = quantitySpan.textContent;
+
+        quantitySpan.innerHTML = `
+            <button type="button" onclick="changeQuantity(${cartId}, -1)">−</button>
+            <span id="edit-qty-${cartId}">${currentQuantity}</span>
+            <button type="button" onclick="changeQuantity(${cartId}, 1)">+</button>
+            <button type="button" onclick="saveQuantity(${cartId})">✓ Save</button>
+        `;
+    }
+
+    function changeQuantity(cartId, change) {
+        const qtyElement = document.getElementById("edit-qty-" + cartId);
+        let quantity = parseInt(qtyElement.textContent);
+
+        quantity += change;
+
+        if (quantity < 1) {
+            quantity = 1;
+        }
+
+        qtyElement.textContent = quantity;
+    }
+
+    function saveQuantity(cartId) {
+        const quantity = document.getElementById("edit-qty-" + cartId).textContent;
+
+        fetch(`/update_cart_quantity/${cartId}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": "{{ csrf_token }}"
+            },
+            body: JSON.stringify({
+                quantity: quantity
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+
+            if (data.status === "Quantity updated") {
+                location.reload();
+            } else {
+                alert(data.status);
+            }
+
+        })
+        .catch(error => {
+            console.error(error);
+            alert("Something went wrong");
+        });
+    }
 
 </script>
 {% endblock content%}

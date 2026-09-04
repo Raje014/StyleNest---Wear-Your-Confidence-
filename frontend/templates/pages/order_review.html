@@ -1,0 +1,150 @@
+{% extends 'layouts/main_template.html' %}
+
+{% block title %}
+    Order Review
+{% endblock title %}
+
+{% block content %}
+
+<section class="bg-light py-4">
+    <div class="container">
+
+        <h4 class="mb-3">Review Your Order</h4>
+        <hr>
+
+        <!-- PRODUCTS -->
+
+        <div class="card p-4 mb-4">
+
+            <h5 class="mb-3">Products</h5>
+
+            {% for item in items %}
+
+            <div class="row align-items-center mb-3">
+
+                <div class="col-md-2">
+                    {% if item.Product.product_image %}
+                    <img src="{{ item.Product.product_image.url }}"
+                         width="70"
+                         height="90"
+                         style="object-fit: cover;">
+                    {% endif %}
+                </div>
+
+                <div class="col-md-4">
+                    <strong>{{ item.Product.name }}</strong>
+                </div>
+
+                <div class="col-md-2">
+                    ₹{{ item.unit_price }}
+                </div>
+
+                <div class="col-md-2">
+                    × {{ item.quantity }}
+                </div>
+
+                <div class="col-md-2">
+                    ₹{{ item.total_price }}
+                </div>
+
+            </div>
+
+            <hr>
+
+            {% endfor %}
+
+            <div class="text-end">
+                <h5>
+                    Total Amount: ₹{{ order.total_amount }}
+                </h5>
+            </div>
+
+        </div>
+
+
+        <!-- CUSTOMER DETAILS -->
+
+        <div class="card p-4 mb-4">
+
+            <h5 class="mb-3">Delivery Details</h5>
+
+            <p>
+                <strong>Name:</strong>
+                {{ order.customer_name }}
+            </p>
+
+            <p>
+                <strong>Mobile:</strong>
+                {{ order.mobile }}
+            </p>
+
+            <p>
+                <strong>Address:</strong>
+                {{ order.address }}
+            </p>
+
+            <p>
+                <strong>City:</strong>
+                {{ order.city }}
+            </p>
+
+            <p>
+                <strong>State:</strong>
+                {{ order.state }}
+            </p>
+
+            <p>
+                <strong>Pincode:</strong>
+                {{ order.pincode }}
+            </p>
+
+        </div>
+
+
+        <!-- PAYMENT -->
+
+        <div class="card p-4 mb-4">
+
+            <h5 class="mb-3">Payment Method</h5>
+
+            {% if order.payment_method == 'COD' %}
+
+                <p class="mb-0">
+                    💵 Cash on Delivery
+                </p>
+
+            {% else %}
+
+                <p class="mb-0">
+                    💳 UPI / Razorpay
+                </p>
+
+            {% endif %}
+
+        </div>
+
+
+        <!-- PLACE ORDER -->
+
+        <div class="text-end">
+
+            <form method="POST"
+                  action="{% url 'place_order' order.id %}">
+
+                {% csrf_token %}
+
+                <button type="submit"
+                        class="btn btn-success btn-lg">
+
+                    Place Order
+
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+</section>
+
+{% endblock content %}
