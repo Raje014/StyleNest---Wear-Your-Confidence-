@@ -22,4 +22,6 @@ urlpatterns = [
     path('place-order/<int:order_id>/', place_order, name='place_order'),
     path('order-success/<int:order_id>/', order_success, name='order_success'),
     path('buy-now/<int:pid>/', buy_now, name='buy_now'),
+    path('payment-success/', payment_success, name='payment_success'),
+    path('chat/', chatbot_api, name='chatbot_api'),
 ]

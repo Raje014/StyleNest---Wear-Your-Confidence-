@@ -7,6 +7,9 @@ from django.contrib.auth import authenticate,login,logout
 import json
 from django.http import JsonResponse
 from decimal import Decimal
+from django.conf import settings
+import razorpay
+from rag.chatbot import answer_question
 
 # Create your views here.
 def dashboard(request):
@@ -206,84 +209,6 @@ def remove_fav(request, fid):
     return redirect("/fav_view_page")
 
 # checkout page
-# def checkout(request):
-#     if not request.user.is_authenticated:
-#         return redirect('/login')
-
-#     cart = Cart.objects.filter(user=request.user)
-
-#     if not cart.exists():
-#         messages.warning(request, "Your cart is empty.")
-#         return redirect('/cart')
-
-#     return render(request, 'pages/checkout.html', {
-#         'cart': cart,
-#         'user': request.user
-#     })
-
-# new checkout page
-# def checkout(request):
-#     if not request.user.is_authenticated:
-#         return redirect('/login')
-
-#     cart = Cart.objects.filter(user=request.user)
-
-#     if not cart.exists():
-#         messages.warning(request, "Your cart is empty.")
-#         return redirect('/cart')
-
-#     if request.method == 'POST':
-
-#         customer_name = request.POST.get('customer_name')
-#         mobile = request.POST.get('mobile')
-#         address = request.POST.get('address')
-#         city = request.POST.get('city')
-#         state = request.POST.get('state')
-#         pincode = request.POST.get('pincode')
-#         payment_method = request.POST.get('payment_method')
-
-#         # Calculate total on server
-#         total_amount = Decimal('0.00')
-
-#         for item in cart:
-#             total_amount += Decimal(str(item.Product.selling_price)) * item.product_qty
-
-#         # Create Order
-#         order = Order.objects.create(
-#             user=request.user,
-#             customer_name=customer_name,
-#             mobile=mobile,
-#             address=address,
-#             city=city,
-#             state=state,
-#             pincode=pincode,
-#             payment_method=payment_method,
-#             total_amount=total_amount,
-#             status='PENDING'
-#         )
-
-#         # Create Order Items
-#         for item in cart:
-
-#             unit_price = Decimal(str(item.Product.selling_price))
-#             total_price = unit_price * item.product_qty
-
-#             OrderItem.objects.create(
-#                 order=order,
-#                 Product=item.Product,
-#                 quantity=item.product_qty,
-#                 unit_price=unit_price,
-#                 total_price=total_price
-#             )
-
-#         return redirect('order_review', order_id=order.id)
-
-#     return render(request, 'pages/checkout.html', {
-#         'cart': cart,
-#         'user': request.user
-#     })
-
-# original checkout
 def checkout(request):
 
     if not request.user.is_authenticated:
@@ -434,7 +359,7 @@ def order_review(request, order_id):
         'items': order.items.all()
     })
 
-# order placed
+# original place order
 def place_order(request, order_id):
 
     if not request.user.is_authenticated:
@@ -458,18 +383,43 @@ def place_order(request, order_id):
         order.status = 'PLACED'
         order.save()
 
-        # Reduce stock
         for item in order.items.all():
             item.Product.quantity -= item.quantity
             item.Product.save()
 
-        # Clear user's cart
         Cart.objects.filter(user=request.user).delete()
 
         return redirect('order_success', order_id=order.id)
 
-    # Razorpay will be added next
-    return redirect('order_review', order_id=order.id)
+    # Razorpay
+    client = razorpay.Client(
+        auth=(
+            settings.RAZORPAY_KEY_ID,
+            settings.RAZORPAY_KEY_SECRET
+        )
+    )
+
+    amount = int(order.total_amount * 100)
+
+    razorpay_order = client.order.create({
+        'amount': amount,
+        'currency': 'INR',
+        'receipt': f'order_{order.id}',
+    })
+
+    Payment.objects.create(
+        order=order,
+        razorpay_order_id=razorpay_order['id'],
+        amount=order.total_amount,
+        status='CREATED'
+    )
+
+    return render(request, 'pages/payment.html', {
+        'order': order,
+        'razorpay_order_id': razorpay_order['id'],
+        'razorpay_key_id': settings.RAZORPAY_KEY_ID,
+        'amount': amount
+    })
 
 # order success page
 def order_success(request, order_id):
@@ -517,3 +467,112 @@ def buy_now(request, pid):
     request.session['buy_now_quantity'] = quantity
 
     return redirect('checkout')
+
+# payment success
+# Razorpay payment success
+def payment_success(request):
+
+    if not request.user.is_authenticated:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Login required'
+        })
+
+    if request.method != 'POST':
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Invalid request'
+        }, status=400)
+
+    data = json.loads(request.body)
+
+    razorpay_payment_id = data.get('razorpay_payment_id')
+    razorpay_order_id = data.get('razorpay_order_id')
+    razorpay_signature = data.get('razorpay_signature')
+
+    try:
+        payment = Payment.objects.get(
+            razorpay_order_id=razorpay_order_id,
+            order__user=request.user
+        )
+    except Payment.DoesNotExist:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Payment record not found'
+        }, status=404)
+
+    client = razorpay.Client(
+        auth=(
+            settings.RAZORPAY_KEY_ID,
+            settings.RAZORPAY_KEY_SECRET
+        )
+    )
+
+    try:
+        client.utility.verify_payment_signature({
+            'razorpay_order_id': payment.razorpay_order_id,
+            'razorpay_payment_id': razorpay_payment_id,
+            'razorpay_signature': razorpay_signature
+        })
+
+    except razorpay.errors.SignatureVerificationError:
+
+        payment.status = 'FAILED'
+        payment.failure_reason = 'Signature verification failed'
+        payment.save()
+
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Payment verification failed'
+        })
+
+    # Payment verified successfully
+    payment.razorpay_payment_id = razorpay_payment_id
+    payment.razorpay_signature = razorpay_signature
+    payment.status = 'SUCCESS'
+    payment.save()
+
+    order = payment.order
+    order.status = 'PAID'
+    order.save()
+
+    # Reduce stock
+    for item in order.items.all():
+        item.Product.quantity -= item.quantity
+        item.Product.save()
+
+    # Clear cart
+    Cart.objects.filter(user=request.user).delete()
+
+    return JsonResponse({
+        'status': 'success',
+        'redirect_url': f'/order-success/{order.id}/'
+    })
+
+
+# chatbot
+def chatbot_api(request):
+    if request.method != "POST":
+        return JsonResponse(
+            {"error": "Only POST requests are allowed."},
+            status=405
+        )
+    try:
+        data = json.loads(request.body)
+        question = data.get("message", "").strip()
+        if not question:
+            return JsonResponse(
+                {"error": "Message cannot be empty."},
+                status=400
+            )
+        answer = answer_question(question)
+        return JsonResponse({
+            "success": True,
+            "response": answer
+        })
+
+    except Exception as e:
+        return JsonResponse({
+            "success": False,
+            "error": str(e)
+        }, status=500)
